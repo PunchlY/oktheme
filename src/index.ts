@@ -150,14 +150,9 @@ class Palette {
     return lighterRatio >= darkerRatio ? light : dark;
   }
 
-  // lighter(ratio: number, color: Palette = this) {
-  //   const dark = xyz65(this);
-  //   const light = { ...dark, y: ratio * (dark.y + 0.05) - 0.05 };
-  //   return color.palette(oklch(light).l);
-  // }
   lighter(ratio: number, color: Palette = this) {
     const eps = 1e-7;
-    let lo = color.l;
+    let lo = this.l;
     let hi = 1;
     for (let i = 0; i < 24; i++) {
       const l = (lo + hi) / 2;
@@ -172,15 +167,10 @@ class Palette {
     return color.palette(hi);
   }
 
-  // darker(ratio: number, color: Palette = this) {
-  //   const light = xyz65(this);
-  //   const dark = { ...light, y: (light.y + 0.05) / ratio - 0.05 };
-  //   return color.palette(oklch(dark).l);
-  // }
   darker(ratio: number, color: Palette = this) {
     const eps = 1e-7;
     let lo = 0;
-    let hi = color.l;
+    let hi = this.l;
     for (let i = 0; i < 24; i++) {
       const l = (lo + hi) / 2;
       const actualColor = color.palette(l);
@@ -221,10 +211,10 @@ class Palette {
     type: T,
     background: Palette,
   ): Record<string, Palette> {
+    const key = this;
     return {
-      [`${type}_palette_key_color`]: this,
       get [type]() {
-        return background.foreground(4.5, this[`${type}_palette_key_color`]);
+        return background.foreground(4.5, key);
       },
       get [`${type}_dim`]() {
         return this[type]!.darker(1.25);
@@ -233,28 +223,37 @@ class Palette {
         return this[type]!.foreground(6);
       },
       get [`${type}_container`]() {
-        const a = background.foreground(1.5, this[`${type}_palette_key_color`]);
-        const b = this[`${type}_dim`]!.darker(2);
-        return deltaEOK(a, this[`${type}_dim`]!) >=
-            deltaEOK(b, this[`${type}_dim`]!)
-          ? a
-          : b;
+        // const a = background.foreground(1.5, key);
+        // const b = this[`${type}_dim`]!.darker(2);
+        // return deltaEOK(a, this[`${type}_dim`]!) >=
+        //     deltaEOK(b, this[`${type}_dim`]!)
+        //   ? a
+        //   : b;
+        return background.foreground(1.5, key);
       },
       get [`on_${type}_container`]() {
         return this[`${type}_container`]!.foreground(6);
       },
-      // get [`${type}_fixed`]() {
-      //   return background.foreground(1.5, this[`${type}_palette_key_color`]);
-      // },
-      // get [`${type}_fixed_dim`]() {
-      //   return this[`${type}_fixed`]!.darker(1.25);
-      // },
-      // get [`on_${type}_fixed`]() {
-      //   return this[`${type}_fixed`]!.foreground(7);
-      // },
-      // get [`on_${type}_fixed_variant`]() {
-      //   return this[`${type}_fixed_dim`]!.foreground(4.5);
-      // },
+    };
+  }
+  fixedRoles<T extends string>(
+    type: T,
+    background: Palette,
+  ): Record<string, Palette> {
+    const key = this;
+    return {
+      get [`${type}_fixed`]() {
+        return background.foreground(1.5, key);
+      },
+      get [`${type}_fixed_dim`]() {
+        return this[`${type}_fixed`]!.darker(1.25);
+      },
+      get [`on_${type}_fixed`]() {
+        return this[`${type}_fixed`]!.foreground(7);
+      },
+      get [`on_${type}_fixed_variant`]() {
+        return this[`${type}_fixed_dim`]!.foreground(4.5);
+      },
     };
   }
 }
@@ -324,6 +323,10 @@ const colors: Record<string, Palette> = {
   ...tertiaryKey.generalRoles("tertiary", surfaceColors.surface_bright!),
   ...errorKey.generalRoles("error", surfaceColors.surface_bright!),
 
+  ...primaryKey.fixedRoles("primary", neutralKey.palette(.9)),
+  ...secondaryKey.fixedRoles("secondary", neutralKey.palette(.9)),
+  ...tertiaryKey.fixedRoles("tertiary", neutralKey.palette(.9)),
+
   get background() {
     return this.surface!;
   },
@@ -334,7 +337,7 @@ const colors: Record<string, Palette> = {
     return this.surface_container_highest!;
   },
   get on_surface_variant() {
-    return this.surface_variant!.foreground(.5);
+    return this.surface_variant!.foreground(6);
   },
   get surface_tint() {
     return this.primary!;

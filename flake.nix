@@ -59,6 +59,7 @@
             bashInteractive
             bun
             bun2nix
+            imagemagick
           ];
 
           shellHook = ''
