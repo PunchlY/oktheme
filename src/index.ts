@@ -296,7 +296,7 @@ const surfaceColors: Record<string, Palette> = {
   get outline_variant() {
     return this.surface_bright!.foreground(1.5);
   },
-  inverse_surface: neutralKey.palette(.9),
+  inverse_surface: neutralKey.palette(.98),
   get inverse_on_surface() {
     return this.inverse_surface!.foreground(7);
   },
@@ -351,14 +351,14 @@ const colors: Record<string, Palette> = {
 };
 
 const color256 = function* () {
-  yield colors.background!;
+  yield colors.surface!;
   yield colors.red_dim!;
   yield colors.green_dim!;
   yield colors.yellow_dim!;
   yield colors.blue_dim!;
   yield colors.magenta_dim!;
   yield colors.cyan_dim!;
-  yield colors.on_background!;
+  yield colors.on_surface!;
   yield colors.outline!;
   yield colors.red!;
   yield colors.green!;
@@ -366,7 +366,9 @@ const color256 = function* () {
   yield colors.blue!;
   yield colors.magenta!;
   yield colors.cyan!;
-  yield colors.inverse_surface!;
+  yield colors.inverse_surface!.l > colors.on_surface!.l
+    ? colors.inverse_surface!
+    : colors.on_surface!;
 
   const black = oklab(colors.background!);
   const red = oklab(redKey);
