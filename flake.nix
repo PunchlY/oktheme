@@ -39,11 +39,18 @@
           nativeBuildInputs = [
             pkgs.bun2nix.hook
           ];
-          buildInputs = [pkgs.bun];
+          buildInputs = [
+            pkgs.bun
+          ];
 
           bunDeps = pkgs.bun2nix.fetchBunDeps {
             bunNix = ./bun.nix;
           };
+
+          bunInstallFlags = [
+            "--omit=dev"
+            "--omit=peer"
+          ];
 
           bunBuildFlags = [
             "src/index.ts"

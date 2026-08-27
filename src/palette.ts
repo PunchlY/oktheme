@@ -12,26 +12,6 @@ import { formatWithOptions } from "node:util";
 const toRgb = toGamut("rgb", "oklch");
 const toOklch = toGamut("oklch", "oklch");
 
-/** APCA-W3 constants (0.0.98G-4g-base) */
-const APCA_SA98G = {
-  mainTRC: 2.4,
-  Rco: 0.2126729,
-  Gco: 0.7151522,
-  Bco: 0.0721750,
-  normBG: 0.56,
-  normTXT: 0.57,
-  revTXT: 0.62,
-  revBG: 0.65,
-  blkThrs: 0.022,
-  blkClmp: 1.414,
-  loClip: 0.1,
-  deltaYmin: 0.0005,
-  scaleBoW: 1.14,
-  scaleWoB: 1.14,
-  loBoWoffset: 0.027,
-  loWoBoffset: 0.027,
-} as const;
-
 export class Palette {
   static convert(color?: Color | string) {
     const res = oklch(color);
@@ -62,9 +42,8 @@ export class Palette {
   }
 
   static key(c: number, h?: number, dark = true, lower = 0, upper = 1) {
-    const eps = 1e-7;
     const peak = this.solid(h);
-    if (c >= peak.c - eps) {
+    if (c >= peak.c) {
       return peak;
     }
     let minL = Math.max(dark ? lower : peak.l, lower);
@@ -116,51 +95,95 @@ export class Palette {
     };
   }
 
-  apcaY() {
+  Y() {
+    const mainTRC = 2.4;
+    const sRco = 0.2126478133913640;
+    const sGco = 0.7151791475336150;
+    const sBco = 0.0721730390750208;
     const { r, g, b } = clampRgb(toRgb(this));
-    function simpleExp(chan: number) {
-      return Math.pow(chan, APCA_SA98G.mainTRC);
-    }
-    return APCA_SA98G.Rco * simpleExp(r) +
-      APCA_SA98G.Gco * simpleExp(g) +
-      APCA_SA98G.Bco * simpleExp(b);
+    const exp = (c: number) => Math.pow(c, mainTRC);
+    return sRco * exp(r) + sGco * exp(g) + sBco * exp(b);
   }
 
-  apcaContrast(background: Palette): number {
-    function clampY(y: number) {
-      return y < APCA_SA98G.blkThrs
-        ? y + Math.pow(APCA_SA98G.blkThrs - y, APCA_SA98G.blkClmp)
-        : y;
-    }
-    const fgY = clampY(this.apcaY());
-    const bgY = clampY(background.apcaY());
-    if (Math.abs(fgY - bgY) < APCA_SA98G.deltaYmin) return 0;
-    let SAPC = 0;
-    let outputContrast = 0;
+  bpca(background: Palette) {
+    const normBG = 0.56;
+    const normTXT = 0.57;
+    const revTXT = 0.62;
+    const revBG = 0.65;
+    const blkThrs = 0.022;
+    const blkClmp = 1.414;
+    const scaleBoW = 1.14;
+    const scaleWoB = 1.14;
+    const loBoWoffset = 0.027;
+    const loWoBoffset = 0.027;
+    const bridgeWoBfact = 0.1414;
+    const bridgeWoBpivot = 0.84;
+    const loClip = 0.1;
+    const deltaYmin = 0.0005;
+    const clampY = (y: number) =>
+      y < blkThrs ? y + Math.pow(blkThrs - y, blkClmp) : y;
+
+    const fgY = clampY(this.Y());
+    const bgY = clampY(background.Y());
+
+    if (Math.abs(bgY - fgY) < deltaYmin) return 0;
+
+    let output: number;
     if (bgY > fgY) {
-      SAPC = (Math.pow(bgY, APCA_SA98G.normBG) -
-        Math.pow(fgY, APCA_SA98G.normTXT)) * APCA_SA98G.scaleBoW;
-      outputContrast = SAPC < APCA_SA98G.loClip
-        ? 0
-        : SAPC - APCA_SA98G.loBoWoffset;
+      const sapc = (Math.pow(bgY, normBG) - Math.pow(fgY, normTXT)) * scaleBoW;
+      output = sapc < loClip ? 0 : sapc - loBoWoffset;
     } else {
-      SAPC =
-        (Math.pow(bgY, APCA_SA98G.revBG) - Math.pow(fgY, APCA_SA98G.revTXT)) *
-        APCA_SA98G.scaleWoB;
-      outputContrast = SAPC > -APCA_SA98G.loClip
-        ? 0
-        : SAPC + APCA_SA98G.loWoBoffset;
+      const sapc = (Math.pow(bgY, revBG) - Math.pow(fgY, revTXT)) * scaleWoB;
+      const bridge = Math.max(0, fgY / bridgeWoBpivot - 1) * bridgeWoBfact;
+      output = sapc > -loClip ? 0 : sapc + loWoBoffset + bridge;
     }
-    return outputContrast * 100;
+    return output * 100;
   }
 
-  maxContrast(...foregrounds: [Palette, ...Palette[]]) {
+  ratio(background: Palette) {
+    const lc = this.bpca(background);
+    const maxY = Math.max(this.Y(), background.Y());
+
+    const offsetA = 0.2693;
+    const preScale = -0.0561;
+    const powerShift = 4.537;
+
+    const mainFactor = 1.113946;
+
+    const loThresh = 0.3;
+    const loExp = 0.48;
+    const preEmph = 0.42;
+    const postDe = 0.6594;
+
+    const hiTrim = 0.0785;
+    const loTrim = 0.0815;
+    const trimThresh = 0.506; // #c0c0c0
+
+    let addTrim = loTrim + hiTrim;
+    if (maxY > trimThresh) {
+      addTrim = loTrim * ((1 - maxY) / (1 - trimThresh)) + hiTrim;
+    }
+
+    const c = Math.max(0, Math.abs(lc) * 0.01);
+    let ratio =
+      (Math.pow(c + preScale, powerShift) + offsetA) * mainFactor * c + addTrim;
+
+    ratio = ratio > loThresh
+      ? 10 * ratio
+      : c < 0.06
+      ? 0
+      : 10 * ratio - (Math.pow(loThresh - ratio + preEmph, loExp) - postDe);
+
+    return ratio;
+  }
+
+  maxRatio(...foregrounds: [Palette, ...Palette[]]) {
     return foregrounds
       .map((color) => ({
         color,
-        contrast: Math.abs(color.apcaContrast(this)),
+        ratio: color.ratio(this),
       }))
-      .sort((a, b) => a.contrast - b.contrast)
+      .sort((a, b) => a.ratio - b.ratio)
       .at(-1)!.color;
   }
 
@@ -172,24 +195,22 @@ export class Palette {
   ) {
     const light = maxL <= this.l
       ? key.tone(maxL)
-      : this.searchApcaContrast(-ratio, key, this.l, maxL);
+      : this.searchLight(ratio, key, this.l, maxL);
     const dark = minL >= this.l
       ? key.tone(minL)
-      : this.searchApcaContrast(ratio, key, minL, this.l);
-    return this.maxContrast(light, dark);
+      : this.searchDark(ratio, key, minL, this.l);
+    return this.maxRatio(light, dark);
   }
 
-  searchApcaContrast(
+  searchLc(
     contrast: number,
     key: Palette = this,
     minL = contrast > 0 ? 0 : this.l,
     maxL = contrast > 0 ? this.l : 1,
-    chromaMultiplier?: number,
   ) {
     for (let i = 0; i < 24; i++) {
       const l = (minL + maxL) / 2;
-      const actualColor = key.tone(l, chromaMultiplier);
-      const actualContrast = actualColor.apcaContrast(this);
+      const actualContrast = key.tone(l).bpca(this);
       if (actualContrast > contrast) {
         minL = l;
       } else {
@@ -199,9 +220,45 @@ export class Palette {
     return key.tone(contrast > 0 ? minL : maxL);
   }
 
+  searchDark(
+    ratio: number,
+    key: Palette = this,
+    minL = 0,
+    maxL = this.l,
+  ) {
+    for (let i = 0; i < 24; i++) {
+      const l = (minL + maxL) / 2;
+      const actualRatio = key.tone(l).ratio(this);
+      if (actualRatio > ratio) {
+        minL = l;
+      } else {
+        maxL = l;
+      }
+    }
+    return key.tone(minL);
+  }
+
+  searchLight(
+    ratio: number,
+    key: Palette = this,
+    minL = this.l,
+    maxL = 1,
+  ) {
+    for (let i = 0; i < 24; i++) {
+      const l = (minL + maxL) / 2;
+      const actualRatio = key.tone(l).ratio(this);
+      if (actualRatio > ratio) {
+        maxL = l;
+      } else {
+        minL = l;
+      }
+    }
+    return key.tone(maxL);
+  }
+
   log(...args: [format?: any, ...param: any[]]) {
     const bg = this.toRgb();
-    const fg = this.foreground(60).toRgb();
+    const fg = this.foreground(4.5).toRgb();
     process.stderr.write(
       `\x1b[48;2;${bg.r};${bg.g};${bg.b}m\x1b[38;2;${fg.r};${fg.g};${fg.b}m`,
     );

@@ -1,4 +1,6 @@
+import { differenceEuclidean, oklab, wcagContrast } from "culori";
 import { Palette } from "./palette";
+import { calcAPCA } from "apca-w3";
 
 export class DynamicScheme {
   readonly n: Palette;
@@ -80,15 +82,23 @@ export class DynamicScheme {
   }
 
   get onSurface() {
-    return this.highestSurface.foreground(75);
+    return this.highestSurface.foreground(11);
+  }
+
+  get surfaceVariant() {
+    return this.surfaceContainerHighest;
+  }
+
+  get onSurfaceVariant() {
+    return this.surfaceVariant.foreground(6);
   }
 
   get outline() {
-    return this.highestSurface.foreground(30);
+    return this.highestSurface.foreground(3);
   }
 
   get outlineVariant() {
-    return this.highestSurface.foreground(15);
+    return this.highestSurface.foreground(1.5);
   }
 
   get inverseSurface() {
@@ -99,7 +109,7 @@ export class DynamicScheme {
   }
 
   get inverseOnSurface() {
-    return this.inverseSurface.foreground(60);
+    return this.inverseSurface.foreground(6);
   }
 
   get shadow() {
@@ -118,41 +128,33 @@ export class DynamicScheme {
     return this.onSurface;
   }
 
-  get surfaceVariant() {
-    return this.surfaceContainerHighest;
-  }
-
-  get onSurfaceVariant() {
-    return this.surfaceVariant.foreground(60);
-  }
-
   get surfaceTint() {
     return this.primary;
   }
 
   get primary() {
-    return this.highestSurface.foreground(45, this.p);
+    return this.highestSurface.foreground(4.5, this.p);
   }
 
   get primaryDim() {
-    return this.primary.searchApcaContrast(15);
+    return this.primary.searchLc(15);
   }
 
   get onPrimary() {
-    return this.primaryDim.foreground(60);
+    return this.primary.foreground(6);
   }
 
   get primaryContainer() {
-    return this.highestSurface.foreground(15, this.p);
+    return this.highestSurface.foreground(1.5, this.p);
   }
 
   get onPrimaryContainer() {
-    return this.primaryContainer.foreground(60);
+    return this.primaryContainer.foreground(6);
   }
 
   get primaryFixed() {
     return this.highestSurface.foreground(
-      15,
+      1.5,
       this.p,
       new DynamicScheme({
         ...this,
@@ -162,22 +164,27 @@ export class DynamicScheme {
   }
 
   get primaryFixedDim() {
-    return this.primaryFixed.searchApcaContrast(15);
+    return this.primaryFixed.searchLc(15);
   }
 
   get onPrimaryFixed() {
-    return this.primaryFixedDim.foreground(60);
+    return this.primaryFixedDim.foreground(6);
   }
 
   get onPrimaryFixedVariant() {
-    return this.primaryFixedDim.foreground(45);
+    return this.primaryFixedDim.foreground(4.5);
   }
 
   get inversePrimary() {
     const dark = this.p.dark();
     const light = this.p.light();
-    return this.highestSurface.maxContrast(
-      this.highestSurface.foreground(60, this.p, dark.l, light.l),
+    return this.highestSurface.maxRatio(
+      this.highestSurface.foreground(
+        6,
+        this.p,
+        dark.l,
+        light.l,
+      ),
       dark,
       light,
     );
@@ -185,7 +192,7 @@ export class DynamicScheme {
 
   get error() {
     return this.highestSurface.foreground(
-      45,
+      4.5,
       this.e,
       this.e.dark().l,
       this.e.light().l,
@@ -193,7 +200,7 @@ export class DynamicScheme {
   }
 
   get errorDim() {
-    return this.error.searchApcaContrast(
+    return this.error.searchLc(
       15,
       undefined,
       this.e.dark().l,
@@ -201,25 +208,41 @@ export class DynamicScheme {
   }
 
   get onError() {
-    return this.error.foreground(60);
+    return this.error.foreground(6);
   }
 
   get errorContainer() {
-    const color = this.highestSurface.foreground(
-      15,
-      this.e,
-      this.e.dark().l,
-      this.e.light().l,
-    );
-    return this.errorDim.maxContrast(
+    const color = this.isDark
+      ? this.highestSurface.searchLight(
+        1.5,
+        this.e,
+        this.e.dark().l,
+      )
+      : this.highestSurface.searchLight(
+        1.5,
+        this.e,
+        undefined,
+        this.e.light().l,
+      );
+    return this.errorDim.maxRatio(
       color,
       this.isDark
-        ? this.errorDim.searchApcaContrast(15, this.e, undefined, color.l)
-        : this.errorDim.searchApcaContrast(-15, this.e, color.l, undefined),
+        ? this.errorDim.searchLc(
+          15,
+          this.e,
+          undefined,
+          color.l,
+        )
+        : this.errorDim.searchLc(
+          -15,
+          this.e,
+          color.l,
+          undefined,
+        ),
     );
   }
 
   get onErrorContainer() {
-    return this.errorContainer.foreground(60);
+    return this.errorContainer.foreground(6);
   }
 }
